@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Allocation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            color: #333;
+            background-color: white;
+        }
+
+    #controls {
+    margin-bottom: 20px;
+    background-color: #ddd0d0;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    display: flex; /* Use flexbox to align items in a row */
+    justify-content: flex-end; /* Align items to the right */
+}
+
+#controls label {
+    margin-right: 10px;
+    font-weight: bold;
+}
+
+#controls input {
+    margin-right: 10px;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+#controls button {
+    padding: 10px 15px;
+    cursor: pointer;
+    border: none;
+    border-radius: 5px;
+    margin-right: 10px;
+}
+
+#initializeButton {
+    background-color: #4CAF50;
+    color: white;
+}
+
+#allocateFirstFitButton {
+    background-color: #008CBA;
+    color: white;
+}
+
+#allocateNextFitButton {
+    background-color: #333;
+    color: white;
+}
+
+#allocateBestFitButton {
+    background-color: #5BC0EB;
+    color: white;
+}
+
+#deallocateButton {
+    background-color:#D9534F ;
+    color: white;
+}
+
+        #output {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            background-color: #fbf8f8;
+            font-size: 14px;
+            line-height: 1.6;
+            border-radius: 8px;
+            
+        }
+        
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        th, td {
+            border: 1px solid #dddddd;
+            text-align: left;
+            padding: 10px;
+        }
+
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .allocated {
+            background-color: #5BC0EB;
+            color: white;
+        }
+
+        .free {
+            background-color: #FFD700;
+            color: #333;
+        }
+
+        #heapVisualizationContainer {
+            margin-top: 20px;
+            display: flex;
+            /* border: 1px solid #ddd; */
+            /* background-color: #fff; */
+            /* padding: 10px; */
+            /* border-radius: 8px; */
+            align-items: center;
+            overflow: auto;
+            white-space: nowrap;
+        }
+
+        #heapVisualization {
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .memoryBlock {
+            border: 1px solid #ddd;
+            margin: 2px;
+            text-align: center;
+            padding: 10px;
+            white-space: pre-wrap; /* Allow content to break onto the next line */
+            overflow: hidden; /* Hide overflowing content */
+            flex-shrink: 0;
+        }
+
+        .memoryBlock p {
+            margin: 0;
+            font-size: 12px; /* Adjust the font size as needed */
+        }
+
+        .allocatedBlock {
+            background-color: #5beb71;
+            color: white;
+        }
+
+        .freeBlock {
+            background-color: #b6b08f;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <label for="heapSize">Heap Size:</label>
+        <input type="text" id="heapSize">
+
+        <button id="initializeButton" onclick="initializeHeap()">Initialize Heap</button>
+
+        <label for="sizeInput">Block Size:</label>
+        <input type="text" id="sizeInput">
+
+        <label for="variableInput">Variable Name:</label>
+        <input type="text" id="variableInput">
+
+        <button id="allocateFirstFitButton" onclick="allocateMemoryFirstFit()">Allocate(First Fit)</button>
+        <button id="allocateNextFitButton" onclick="allocateMemoryNextFit()">Allocate(Next Fit)</button>
+        <button id="allocateBestFitButton" onclick="allocateMemoryBestFit()">Allocate(Best Fit)</button>
+        <button id="deallocateButton" onclick="deallocateMemory()">Deallocate Memory</button>
+    
+    </div>
+
+    <div id="output"> <h1>Memory History</h1></div>
+
+    <table id="memoryTable">
+        <thead>
+            <tr>
+                <th style="background-color: #4CAF50; color: white;">Address</th>
+                <th style="background-color: #008CBA; color: white;">Block(Pointer) Name</th>
+                <th style="background-color: #4CAF50; color: white;">Size(in Bytes)</th>
+                <th style="background-color: #008CBA; color: white;">Status</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <div id="heapVisualizationContainer">
+        <div id="heapVisualization"></div>
+    </div>
+
+    <script>
+        let heapMemory = [];
+        let allocatedVariables = [];
+        let currentAddress = 0x40000;
+        let lastAllocatedIndex = -1; // For Next Fit
+
+        function initializeHeap() {
+            const heapSizeInput = document.getElementById('heapSize');
+            const totalSize = parseInt(heapSizeInput.value);
+
+            if (isNaN(totalSize) || totalSize <= 0) {
+                printOutput('Invalid heap size. Please enter a valid size.');
+                return;
+            }
+
+            heapMemory = [['0x40000', 'brk_ptr', totalSize, 0]];
+            currentAddress = 0x40000;
+            lastAllocatedIndex = -1;
+            updateMemoryTable();
+            printOutput('Heap Initialized with total size: ' + totalSize);
+
+            heapSizeInput.disabled = true;
+            updateMemoryVisualization();
+        }
+
+        function allocateMemoryFirstFit() {
+            const sizeInput = document.getElementById('sizeInput');
+            const variableInput = document.getElementById('variableInput');
+           
+            // Define a regular expression pattern
+            const pattern = /^[a-zA-Z][a-zA-Z0-9_]*$/;
+
+            const size = parseInt(sizeInput.value);
+            const variableName = variableInput.value;
+
+            if (isNaN(size) || size <= 0 || variableName.trim() === '') {
+                printOutput('Invalid input. Please enter a valid size and pointer name.');
+                return;
+            }
+           
+            if (variableName == '') {
+                printOutput('No pointer name entered!')
+                return;
+            }
+           
+            if (pattern.test(variableName)) {
+              //printOutput("Valid variable name");
+            } else {
+              printOutput("Invalid pointer name");
+              return
+            }
+            if (allocatedVariables.includes(variableName)) {
+                printOutput(`Pointername ${variableName} is already allocated.`);
+                return;
+            }
+
+            const success = allocateMemoryBlockFirstFit(variableName, size);
+            if (success) {
+                allocatedVariables.push(variableName);
+                printOutput(`Allocation successful for pointer ${variableName}`);
+                updateMemoryVisualization();
+            } else {
+                printOutput('Allocation failed. Not enough free space.');
+                printExternalFragmentation();
+            }
+
+            sizeInput.value = '';
+            variableInput.value = '';
+            updateMemoryTable();
+        }
+
+        function allocateMemoryNextFit() {
+            const sizeInput = document.getElementById('sizeInput');
+            const variableInput = document.getElementById('variableInput');
+           
+            // Define a regular expression pattern
+            const pattern = /^[a-zA-Z][a-zA-Z0-9_]*$/;
+
+            const size = parseInt(sizeInput.value);
+            const variableName = variableInput.value;
+
+            if (isNaN(size) || size <= 0 || variableName.trim() === '') {
+                printOutput('Invalid input. Please enter a valid size and pointer name.');
+                return;
+            }
+
+            if (variableName == '') {
+                printOutput('No pointer name entered!')
+                return;
+            }
+            if (pattern.test(variableName)) {
+              //printOutput("Valid variable name");
+            } else {
+              printOutput("Invalid pointer name");
+              return
+            }
+            if (allocatedVariables.includes(variableName)) {
+                printOutput(`Pointer ${variableName} is already allocated.`);
+                return;
+            }
+
+            const success = allocateMemoryBlockNextFit(variableName, size);
+            if (success) {
+                allocatedVariables.push(variableName);
+                printOutput(`Allocation successful for pointer ${variableName}`);
+                updateMemoryVisualization();
+            } else {
+                printOutput('Allocation failed. Not enough free space.');
+                printExternalFragmentation();
+            }
+
+            sizeInput.value = '';
+            variableInput.value = '';
+            updateMemoryTable();
+        }
+
+        function allocateMemoryBestFit() {
+            const sizeInput = document.getElementById('sizeInput');
+            const variableInput = document.getElementById('variableInput');
+           
+            // Define a regular expression pattern
+            const pattern = /^[a-zA-Z][a-zA-Z0-9_]*$/;
+
+            const size = parseInt(sizeInput.value);
+            const variableName = variableInput.value;
+
+            if (isNaN(size) || size <= 0 || variableName.trim() === '') {
+                printOutput('Invalid input. Please enter a valid size and pointer name.');
+                return;
+            }
+
+            if (variableName == '') {
+                printOutput('No pointer name entered!')
+                return;
+            }
+            if (pattern.test(variableName)) {
+              //printOutput("Valid variable name");
+            } else {
+              printOutput("Invalid  pointer name");
+              return
+            }
+            if (allocatedVariables.includes(variableName)) {
+                printOutput(`Pointer ${variableName} is already allocated.`);
+                return;
+            }
+
+            const success = allocateMemoryBlockBestFit(variableName, size);
+            if (success) {
+                allocatedVariables.push(variableName);
+                printOutput(`Allocation successful for Pointer ${variableName}`);
+                updateMemoryVisualization();
+            } else {
+                printOutput('Allocation failed. Not enough free space.');
+                printExternalFragmentation();
+            }
+
+            sizeInput.value = '';
+            variableInput.value = '';
+            updateMemoryTable();
+        }
+
+        function allocateMemoryBlockFirstFit(variableName, size) {
+            const brkIndex = heapMemory.findIndex(block => block[1] === 'brk_ptr');
+
+            for (let i = 0; i < heapMemory.length; i++) {
+                const block = heapMemory[i];
+
+                if (block[3] === 0 && block[2] >= size) {
+                    if (block[2] === size) {
+                        block[1] = variableName;
+                        block[3] = 1;
+                    } else {
+                        const allocatedBlock = [block[0], variableName, size, 1];
+                        const remainingBlock = [calculateNextAddress(block[0], size), '', block[2] - size, 0];
+
+                        heapMemory.splice(i, 1, allocatedBlock, remainingBlock);
+                    }
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        function allocateMemoryBlockNextFit(variableName, size) {
+            const brkIndex = heapMemory.findIndex(block => block[1] === 'brk_ptr');
+
+            for (let i = lastAllocatedIndex + 1; i < heapMemory.length; i++) {
+                const block = heapMemory[i];
+
+                if (block[3] === 0 && block[2] >= size) {
+                    if (block[2] === size) {
+                        block[1] = variableName;
+                        block[3] = 1;
+                    } else {
+                        const allocatedBlock = [block[0], variableName, size, 1];
+                        const remainingBlock = [calculateNextAddress(block[0], size), '', block[2] - size, 0];
+
+                        heapMemory.splice(i, 1, allocatedBlock, remainingBlock);
+                    }
+
+                    lastAllocatedIndex = i;
+                    return true;
+                }
+            }
+
+            for (let i = 0; i <= lastAllocatedIndex; i++) {
+                const block = heapMemory[i];
+
+                if (block[3] === 0 && block[2] >= size) {
+                    if (block[2] === size) {
+                        block[1] = variableName;
+                        block[3] = 1;
+                    } else {
+                        const allocatedBlock = [block[0], variableName, size, 1];
+                        const remainingBlock = [calculateNextAddress(block[0], size), '', block[2] - size, 0];
+
+                        heapMemory.splice(i, 1, allocatedBlock, remainingBlock);
+                    }
+
+                    lastAllocatedIndex = i;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        
+
+        function calculateExternalFragmentation() {
+            let externalFragmentation = 0;
+
+            for (let i = 0; i < heapMemory.length - 1; i++) {
+                const currentBlock = heapMemory[i];
+                const nextBlock = heapMemory[i + 1];
+
+                if (currentBlock[3] === 1 && nextBlock[3] === 0) {
+                    externalFragmentation += nextBlock[2];
+                }
+            }
+
+            return externalFragmentation;
+        }
+
+        function printExternalFragmentation() {
+            const externalFragmentation = calculateExternalFragmentation();
+            printOutput(`External Fragmentation: ${externalFragmentation} units`);
+        }
+
+        function allocateMemoryBlockBestFit(variableName, size) {
+            let bestFitIndex = -1;
+            let bestFitSize = Infinity;
+
+            for (let i = 0; i < heapMemory.length; i++) {
+                const block = heapMemory[i];
+
+                if (block[3] === 0 && block[2] >= size) {
+                    const fragmentation = block[2] - size;
+
+                    if (fragmentation < bestFitSize) {
+                        bestFitIndex = i;
+                        bestFitSize = fragmentation;
+                    }
+                }
+            }
+
+            if (bestFitIndex !== -1) {
+                const block = heapMemory[bestFitIndex];
+
+                if (block[2] === size) {
+                    block[1] = variableName;
+                    block[3] = 1;
+                } else {
+                    const allocatedBlock = [block[0], variableName, size, 1];
+                    const remainingBlock = [calculateNextAddress(block[0], size), '', block[2] - size, 0];
+
+                    heapMemory.splice(bestFitIndex, 1, allocatedBlock, remainingBlock);
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        function calculateNextAddress(address, size) {
+            return '0x' + (parseInt(address, 16) + size).toString(16);
+        }
+
+        function deallocateMemory() {
+            const variableInput = document.getElementById('variableInput');
+            const variableName = variableInput.value.trim();
+
+            if (variableName === '') {
+                printOutput('Please enter a valid pointer name.');
+                return;
+            }
+
+            if (!allocatedVariables.includes(variableName)) {
+                printOutput(`Pointer ${variableName} does not exist.`);
+                return;
+            }
+
+            deallocateMemoryBlock(variableName);
+            printOutput(`Deallocated memory for pointer ${variableName}`);
+            allocatedVariables = allocatedVariables.filter(varName => varName !== variableName);
+
+            variableInput.value = '';
+            updateMemoryTable();
+        }
+
+        function deallocateMemoryBlock(variableName) {
+            for (let i = 0; i < heapMemory.length; i++) {
+                if (heapMemory[i][1] === variableName && heapMemory[i][3] === 1) {
+                    const previousBlockFree = i > 0 && heapMemory[i - 1][3] === 0;
+                    const nextBlockFree = i < heapMemory.length - 1 && heapMemory[i + 1][3] === 0;
+
+                    let coalescingMessage = '';
+
+                    // Coalesce with the previous block if free
+                    if (previousBlockFree) {
+                        heapMemory[i - 1][2] += heapMemory[i][2]; // Merge sizes
+                        heapMemory.splice(i, 1); // Remove the current block
+                        coalescingMessage += 'Backward Coalescing ';
+                        i--; // Adjust the index after removal
+                    }
+
+                    // Coalesce with the next block if free
+                    if (nextBlockFree) {
+                        heapMemory[i][2] += heapMemory[i + 1][2]; // Merge sizes
+                        heapMemory.splice(i + 1, 1); // Remove the next block
+                        coalescingMessage += 'Forward Coalescing ';
+                    }
+
+                    if (coalescingMessage === '') {
+                        coalescingMessage = 'No Coalescing';
+                    }
+
+                    heapMemory[i][1] = ''; // Clear the variable name
+                    heapMemory[i][3] = 0;  // Set the status to free
+
+                    updateMemoryVisualization();
+                    printOutput(`Deallocated memory for pointer ${variableName}. ${coalescingMessage}`);
+                    allocatedVariables = allocatedVariables.filter(varName => varName !== variableName);
+                    break;
+                }
+            }
+        }
+
+
+        function updateMemoryTable() {
+            const memoryTableBody = document.querySelector('#memoryTable tbody');
+            memoryTableBody.innerHTML = '';
+
+            heapMemory.forEach((block, index) => {
+                const row = memoryTableBody.insertRow();
+                const addressCell = row.insertCell(0);
+                const variableNameCell = row.insertCell(1);
+                const sizeCell = row.insertCell(2);
+                const allocationStatusCell = row.insertCell(3);
+
+                addressCell.textContent = block[0];
+                variableNameCell.textContent = block[1];
+                sizeCell.textContent = block[2];
+                allocationStatusCell.textContent = block[3] === 0 ? 'Free' : 'Allocated';
+            });
+
+        }
+
+        function printOutput(message) {
+            const outputDiv = document.getElementById('output');
+            outputDiv.innerHTML += `<p>${message}</p>`;
+        }
+        function updateMemoryVisualization() {
+            const heapVisualization = document.getElementById('heapVisualization');
+            heapVisualization.innerHTML = '';
+
+            let currentAddress = 0x40000;
+
+            heapMemory.forEach((block, index) => {
+                const memoryBlock = document.createElement('div');
+                memoryBlock.className = `memoryBlock ${block[3] === 0 ? 'freeBlock' : 'allocatedBlock'}`;
+                memoryBlock.style.width = `${block[2] * 5}px`; // Adjust width based on size
+                memoryBlock.textContent = `Address: ${block[0]}\nSize: ${block[2]}\nStatus: ${block[3] === 0 ? 'Free' : 'Allocated'}`;
+
+                heapVisualization.appendChild(memoryBlock);
+
+                if (block[3] === 1) {
+                    // For allocated blocks, update the current address
+                    currentAddress = calculateNextAddress(block[0], block[2]);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
